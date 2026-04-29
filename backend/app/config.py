@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     bitbucket_token: Optional[str] = None
 
     anthropic_api_key: Optional[str] = None
+    anthropic_model: str = "claude-haiku-4-5-20251001"
 
     max_diff_size: int = 500000
     simulation_timeout: int = 30

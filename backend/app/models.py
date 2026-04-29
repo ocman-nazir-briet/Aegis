@@ -80,3 +80,45 @@ class APIResponse(BaseModel):
     success: bool
     data: Optional[Any] = None
     error: Optional[str] = None
+
+
+class WhatIfRequest(BaseModel):
+    description: str
+    target_service: str
+
+
+class TelemetryMetric(BaseModel):
+    service_name: str
+    avg_p99_latency: float = 0.0
+    error_rate: float = 0.0
+    throughput: float = 0.0
+    health_score: float = 1.0
+
+
+class TelemetryIngestionRequest(BaseModel):
+    metrics: List[TelemetryMetric]
+
+
+class FeedbackRequest(BaseModel):
+    simulation_id: str
+    actual_latency_delta: float
+    actual_errors: int
+
+
+class HotspotResponse(BaseModel):
+    service_name: str
+    health_score: float
+    total_dependencies: int
+    incoming_deps: int
+    outgoing_deps: int
+    data_deps: int
+    risk_level: str
+
+
+class CentralityNode(BaseModel):
+    rank: int
+    service_name: str
+    centrality_score: int
+    function_count: int
+    endpoint_count: int
+    criticality: str

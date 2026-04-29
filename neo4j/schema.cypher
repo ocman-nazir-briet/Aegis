@@ -146,3 +146,15 @@ CREATE (:ChangeEvent {
     simulated_at: datetime(),
     actual_outcome: {latency_impact: 5.2, error_increase: 0.001}
 });
+
+// ====================== VECTOR INDEXES FOR GRAPHRAG ======================
+// These enable semantic search for GraphRAG retrieval
+// Note: Vector dimensions are 1536 for compatibility with OpenAI embeddings and Claude
+
+CREATE VECTOR INDEX vec_function_embedding IF NOT EXISTS
+FOR (f:Function) ON f.embedding
+OPTIONS {indexConfig: {`vector.dimensions`: 1536, `vector.similarity_function`: 'cosine'}};
+
+CREATE VECTOR INDEX vec_service_embedding IF NOT EXISTS
+FOR (s:Service) ON s.embedding
+OPTIONS {indexConfig: {`vector.dimensions`: 1536, `vector.similarity_function`: 'cosine'}};

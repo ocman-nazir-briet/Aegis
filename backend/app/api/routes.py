@@ -1,41 +1,43 @@
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException, Depends, Query, Request
 from datetime import datetime
 import logging
-from typing import Optional
+from typing import Optional, List
 
 from app.models import (
     HealthResponse, IngestRepoRequest, IngestRepoResponse,
     GraphStatsResponse, ArchitectureMapResponse, NodeData,
-    ChangeRequest, SimulationResult, BlastRadius, RiskLevel, APIResponse
+    ChangeRequest, SimulationResult, BlastRadius, RiskLevel, APIResponse,
+    WhatIfRequest, TelemetryIngestionRequest, FeedbackRequest,
+    HotspotResponse, CentralityNode
 )
 from app.services.neo4j_service import Neo4jService
 from app.services.ingestion_service import RepoIngestionService
+from app.services.simulation_service import SimulationService
+from app.services.telemetry_service import TelemetryService
 from app.config import settings
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["api"])
 
-# Service instances (would be properly injected in production)
-neo4j_service: Optional[Neo4jService] = None
-ingestion_service: Optional[RepoIngestionService] = None
+
+def get_neo4j_service(request: Request) -> Neo4jService:
+    """Get Neo4j service from app state."""
+    return request.app.state.neo4j
 
 
-def get_neo4j_service() -> Neo4jService:
-    global neo4j_service
-    if neo4j_service is None:
-        neo4j_service = Neo4jService(
-            settings.neo4j_uri,
-            settings.neo4j_user,
-            settings.neo4j_password
-        )
-    return neo4j_service
+def get_simulation_service(request: Request) -> SimulationService:
+    """Get simulation service from app state."""
+    return request.app.state.simulation
+
+
+def get_telemetry_service(request: Request) -> TelemetryService:
+    """Get telemetry service from app state."""
+    return request.app.state.telemetry
 
 
 def get_ingestion_service(neo4j: Neo4jService = Depends(get_neo4j_service)) -> RepoIngestionService:
-    global ingestion_service
-    if ingestion_service is None:
-        ingestion_service = RepoIngestionService(neo4j)
-    return ingestion_service
+    """Get ingestion service."""
+    return RepoIngestionService(neo4j)
 
 
 @router.get("/health", response_model=APIResponse)
@@ -66,10 +68,7 @@ async def ingest_repository(
 ):
     """Trigger repository ingestion."""
     try:
-        # In a real implementation, this would be async/queued
-        # For now, we'll just return a job ID
         job_id = f"job_{datetime.now().timestamp()}"
-
         result = IngestRepoResponse(
             job_id=job_id,
             status="queued",
@@ -149,41 +148,39 @@ async def get_node_details(
 @router.post("/simulate/change", response_model=APIResponse)
 async def simulate_change(
     request: ChangeRequest,
-    neo4j: Neo4jService = Depends(get_neo4j_service)
+    simulation: SimulationService = Depends(get_simulation_service)
 ):
-    """Analyze a proposed change and predict impact."""
+    """Analyze a proposed change and predict impact using GraphRAG + LLM."""
     try:
-        # Validate diff size
         if len(request.diff) > settings.max_diff_size:
             return APIResponse(
                 success=False,
                 error=f"Diff exceeds maximum size of {settings.max_diff_size} bytes"
             )
 
-        # Basic simulation logic - would use LLM in Phase 2
-        result = SimulationResult(
-            risk_score=RiskLevel.LOW,
-            confidence=0.8,
-            blast_radius=BlastRadius(
-                services=1,
-                endpoints=2,
-                databases=0,
-                affected_entities=["service_a", "endpoint_1", "endpoint_2"]
-            ),
-            predicted_impact={
-                "latency_delta_ms": 10,
-                "error_rate_increase": 0.1
-            },
-            explanation="This is a placeholder simulation result. Full LLM integration in Phase 2.",
-            mitigations=[
-                "Add comprehensive tests",
-                "Review with team lead",
-                "Monitor metrics after deploy"
-            ]
-        )
+        result = simulation.simulate_change(request)
         return APIResponse(success=True, data=result)
+
     except Exception as e:
         logger.error(f"Simulation failed: {e}")
+        return APIResponse(
+            success=False,
+            error=str(e)
+        )
+
+
+@router.post("/simulate/whatif", response_model=APIResponse)
+async def simulate_whatif(
+    request: WhatIfRequest,
+    simulation: SimulationService = Depends(get_simulation_service)
+):
+    """Simulate a what-if scenario for a specific service."""
+    try:
+        result = simulation.simulate_whatif(request.description, request.target_service)
+        return APIResponse(success=True, data=result)
+
+    except Exception as e:
+        logger.error(f"What-if simulation failed: {e}")
         return APIResponse(
             success=False,
             error=str(e)
@@ -194,15 +191,87 @@ async def simulate_change(
 async def get_hotspots(neo4j: Neo4jService = Depends(get_neo4j_service)):
     """Get architectural hotspots with elevated risk."""
     try:
-        # Placeholder - would return real data from graph analysis
-        hotspots = {
-            "high_risk_services": [],
-            "critical_dependencies": [],
-            "architectural_debt": []
-        }
-        return APIResponse(success=True, data=hotspots)
+        hotspots = neo4j.get_hotspots()
+        return APIResponse(
+            success=True,
+            data={"hotspots": hotspots}
+        )
     except Exception as e:
         logger.error(f"Failed to get hotspots: {e}")
+        return APIResponse(
+            success=False,
+            error=str(e)
+        )
+
+
+@router.get("/insights/centrality", response_model=APIResponse)
+async def get_centrality(neo4j: Neo4jService = Depends(get_neo4j_service)):
+    """Get services ranked by centrality (connectivity)."""
+    try:
+        ranked = neo4j.get_centrality()
+        return APIResponse(
+            success=True,
+            data={"services": ranked}
+        )
+    except Exception as e:
+        logger.error(f"Failed to get centrality: {e}")
+        return APIResponse(
+            success=False,
+            error=str(e)
+        )
+
+
+@router.post("/feedback/outcome", response_model=APIResponse)
+async def record_feedback(
+    request: FeedbackRequest,
+    neo4j: Neo4jService = Depends(get_neo4j_service)
+):
+    """Record actual post-deployment outcome for a simulation."""
+    try:
+        with neo4j.driver.session() as session:
+            session.run("""
+                MATCH (ce:ChangeEvent)
+                WHERE ce.change_id = $simulation_id
+                SET ce.actual_outcome = {
+                    latency_delta: $latency_delta,
+                    error_count: $error_count,
+                    recorded_at: datetime()
+                }
+            """,
+            simulation_id=request.simulation_id,
+            latency_delta=request.actual_latency_delta,
+            error_count=request.actual_errors
+        )
+
+        return APIResponse(
+            success=True,
+            data={"message": "Feedback recorded"}
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to record feedback: {e}")
+        return APIResponse(
+            success=False,
+            error=str(e)
+        )
+
+
+@router.post("/telemetry/ingest", response_model=APIResponse)
+async def ingest_telemetry(
+    request: TelemetryIngestionRequest,
+    telemetry: TelemetryService = Depends(get_telemetry_service)
+):
+    """Ingest telemetry metrics and map to graph nodes."""
+    try:
+        metrics_list = [metric.dict() for metric in request.metrics]
+        result = telemetry.ingest_metrics(metrics_list)
+        return APIResponse(
+            success=result["failed"] == 0,
+            data=result
+        )
+
+    except Exception as e:
+        logger.error(f"Telemetry ingestion failed: {e}")
         return APIResponse(
             success=False,
             error=str(e)
