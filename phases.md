@@ -1,0 +1,37 @@
+# Project Phase Tracking
+
+This document tracks the phases and progress of the Aegis Twin project.
+
+## Phase 1: Foundation
+Status: Not started / Planned
+- Establish repo ingestion and graph schema
+- Implement backend API and Neo4j integration
+- Build basic dashboard topology explorer
+
+## Phase 2: Simulation and AI
+Status: Not started / Planned
+- Add telemetry ingestion and mapping
+- Implement change impact analysis and GraphRAG flow
+- Build simulation studio and risk report output
+
+## Phase 3: Developer Tooling
+Status: Not started / Planned
+- Develop VS Code extension with inline feedback
+- Add command palette and sidebar workflows
+- Build CI/CD integration for PR checks
+
+## Phase 4: Production Readiness
+Status: Not started / Planned
+- Add adaptive learning and feedback loop
+- Harden security, logging, and observability
+- Complete accessibility and performance testing
+
+## Phase 5: Launch and Scale
+Status: Not started / Planned
+- Deploy production environment
+- Monitor performance, reliability, and model accuracy
+- Iterate on feedback and expand language/support coverage
+
+## Notes
+- Update this file as each phase begins, progresses, or completes.
+- Include dates, owners, and key milestones for each phase.
