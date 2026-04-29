@@ -3,10 +3,13 @@
 This document tracks the phases and progress of the Aegis Twin project.
 
 ## Phase 1: Foundation
-Status: Not started / Planned
-- Establish repo ingestion and graph schema
-- Implement backend API and Neo4j integration
-- Build basic dashboard topology explorer
+Status: In Progress
+- [x] Establish repo ingestion and graph schema
+- [x] Implement backend API and Neo4j integration
+- [x] Build basic dashboard topology explorer
+- [x] Set up Docker Compose for local development
+- [ ] Refine repository ingestion with Tree-Sitter
+- [ ] Test with sample repositories
 
 ## Phase 2: Simulation and AI
 Status: Not started / Planned
