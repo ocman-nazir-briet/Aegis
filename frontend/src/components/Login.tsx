@@ -18,7 +18,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
     setLoading(true);
 
     try {
-      const response = await api.post('/api/auth/token', {
+      const response = await api.post('/auth/token', {
         username,
         password,
       });
