@@ -1,252 +1,240 @@
 import { useEffect, useState, useCallback } from 'react'
+import ReactFlow, {
+  Node,
+  Edge,
+  Background,
+  Controls,
+  MiniMap,
+  useNodesState,
+  useEdgesState,
+  NodeTypes,
+  Handle,
+  Position,
+} from 'reactflow'
+import 'reactflow/dist/style.css'
 import axios from 'axios'
-import { GraphStats, ArchitectureMap, APIResponse, Node as GraphNode, Edge as GraphEdge } from '../types'
+import { GraphStats, APIResponse } from '../types'
+import type { ArchitectureMap, Node as GraphNode } from '../types'
 
 interface Props {
   stats: GraphStats
 }
 
+// ─── Colour mapping ────────────────────────────────────────────────────────
+const LABEL_COLOR: Record<string, string> = {
+  Service:    '#3b82f6',
+  Function:   '#10b981',
+  Endpoint:   '#f59e0b',
+  Database:   '#ef4444',
+  Deployment: '#8b5cf6',
+  Queue:      '#ec4899',
+  Class:      '#06b6d4',
+}
+
+const riskColor = (score?: number): string => {
+  if (!score) return LABEL_COLOR['Service'] ?? '#6b7280'
+  if (score < 0.5) return '#22c55e'
+  if (score < 0.75) return '#f59e0b'
+  return '#ef4444'
+}
+
+// ─── Custom node ────────────────────────────────────────────────────────────
+function ServiceNode({ data }: { data: any }) {
+  const bg = data.riskScore
+    ? riskColor(data.riskScore)
+    : (LABEL_COLOR[data.label] ?? '#6b7280')
+  return (
+    <>
+      <Handle type="target" position={Position.Top} />
+      <div
+        className="rounded-lg px-3 py-2 text-xs text-white shadow-lg border border-white/20"
+        style={{ background: bg, minWidth: 100, textAlign: 'center' }}
+      >
+        <div className="font-bold truncate max-w-[120px]">{data.name || data.label}</div>
+        <div className="text-[10px] opacity-70 mt-0.5">{data.label}</div>
+        {data.health_score !== undefined && (
+          <div className="mt-1 text-[10px]">
+            Health: {(data.health_score * 100).toFixed(0)}%
+          </div>
+        )}
+      </div>
+      <Handle type="source" position={Position.Bottom} />
+    </>
+  )
+}
+
+const NODE_TYPES: NodeTypes = { aegis: ServiceNode }
+
+// ─── Layout helpers ─────────────────────────────────────────────────────────
+function gridLayout(nodes: GraphNode[]): Record<string, { x: number; y: number }> {
+  const positions: Record<string, { x: number; y: number }> = {}
+  const cols = Math.max(3, Math.ceil(Math.sqrt(nodes.length)))
+  nodes.forEach((n, i) => {
+    positions[n.id] = {
+      x: (i % cols) * 220,
+      y: Math.floor(i / cols) * 160,
+    }
+  })
+  return positions
+}
+
+// ─── Component ──────────────────────────────────────────────────────────────
 export default function ArchitectureExplorer({ stats }: Props) {
-  const [architecture, setArchitecture] = useState<ArchitectureMap | null>(null)
+  const [rfNodes, setRfNodes, onNodesChange] = useNodesState([])
+  const [rfEdges, setRfEdges, onEdgesChange] = useEdgesState([])
   const [loading, setLoading] = useState(true)
-  const [selectedNode, setSelectedNode] = useState<string | null>(null)
-  const [nodePositions, setNodePositions] = useState<Record<string, { x: number; y: number }>>({})
+  const [error, setError] = useState<string | null>(null)
+  const [selected, setSelected] = useState<GraphNode | null>(null)
+  const [search, setSearch] = useState('')
 
-  useEffect(() => {
-    fetchArchitecture()
-  }, [])
+  const buildGraph = useCallback((arch: ArchitectureMap) => {
+    const positions = gridLayout(arch.nodes)
+    const nodes: Node[] = arch.nodes.map((n) => ({
+      id: n.id,
+      type: 'aegis',
+      position: positions[n.id] ?? { x: 0, y: 0 },
+      data: { ...n.data, label: n.label, name: n.data.label || n.data.name || n.id },
+    }))
+    const edges: Edge[] = arch.edges.map((e, i) => ({
+      id: `e${i}`,
+      source: e.source,
+      target: e.target,
+      label: e.type,
+      style: { stroke: '#4b5563' },
+      labelStyle: { fill: '#9ca3af', fontSize: 9 },
+    }))
+    setRfNodes(nodes)
+    setRfEdges(edges)
+  }, [setRfNodes, setRfEdges])
 
-  const fetchArchitecture = async () => {
+  const fetchArchitecture = useCallback(async () => {
+    setLoading(true)
+    setError(null)
     try {
-      setLoading(true)
-      const response = await axios.get<APIResponse<ArchitectureMap>>('/api/v1/architecture/map?limit=500')
-      if (response.data.success && response.data.data) {
-        setArchitecture(response.data.data)
-        // Calculate simple grid positions
-        const positions: Record<string, { x: number; y: number }> = {}
-        const nodeCount = response.data.data.nodes.length
-        const cols = Math.ceil(Math.sqrt(nodeCount))
-        response.data.data.nodes.forEach((node, i) => {
-          positions[node.id] = {
-            x: (i % cols) * 200,
-            y: Math.floor(i / cols) * 150
-          }
-        })
-        setNodePositions(positions)
-      }
-    } catch (err) {
-      console.error('Failed to fetch architecture:', err)
+      const res = await axios.get<APIResponse<ArchitectureMap>>('/api/v1/architecture/map?limit=500')
+      if (res.data.success && res.data.data) buildGraph(res.data.data)
+      else setError(res.data.error || 'No data')
+    } catch {
+      setError('Failed to fetch architecture')
     } finally {
       setLoading(false)
     }
-  }
+  }, [buildGraph])
 
-  const getNodeColor = useCallback((label: string) => {
-    switch (label) {
-      case 'Service':
-        return '#3b82f6'
-      case 'Function':
-        return '#10b981'
-      case 'Endpoint':
-        return '#f59e0b'
-      case 'Database':
-        return '#ef4444'
-      case 'Deployment':
-        return '#8b5cf6'
-      default:
-        return '#6b7280'
-    }
+  useEffect(() => { fetchArchitecture() }, [fetchArchitecture])
+
+  // Filter nodes by search
+  const displayNodes = search
+    ? rfNodes.map((n) => ({
+        ...n,
+        hidden: !n.data.name?.toLowerCase().includes(search.toLowerCase()),
+      }))
+    : rfNodes
+
+  const onNodeClick = useCallback((_: any, node: Node) => {
+    // Find the original GraphNode to show in panel
+    const orig = { id: node.id, label: node.data.label, data: node.data }
+    setSelected(orig as GraphNode)
   }, [])
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-white mb-4"></div>
-          <p>Loading topology...</p>
-        </div>
+  if (loading) return (
+    <div className="flex items-center justify-center h-full">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mb-3 mx-auto" />
+        <p>Loading topology…</p>
       </div>
-    )
-  }
-
-  if (!architecture) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center text-gray-400">
-          <p>No architecture data available</p>
-        </div>
-      </div>
-    )
-  }
-
-  const selectedNodeData = architecture.nodes.find(n => n.id === selectedNode)
+    </div>
+  )
 
   return (
-    <div className="h-full flex flex-col bg-gray-850 overflow-hidden">
-      <div className="p-4 border-b border-gray-700 flex justify-between items-center">
-        <div>
-          <h2 className="text-xl font-semibold">Architecture Topology</h2>
-          <p className="text-sm text-gray-400">{architecture.nodes.length} nodes, {architecture.edges.length} relationships</p>
-        </div>
+    <div className="h-full flex flex-col overflow-hidden">
+      {/* Toolbar */}
+      <div className="p-3 border-b border-gray-700 flex items-center gap-3 bg-gray-800">
+        <input
+          type="text"
+          placeholder="Search nodes…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="bg-gray-700 text-white px-3 py-1 rounded text-sm w-56 outline-none"
+        />
+        <span className="text-xs text-gray-400">{stats.total_nodes} nodes · {stats.total_relationships} edges</span>
         <button
           onClick={fetchArchitecture}
-          className="bg-gray-700 hover:bg-gray-600 text-white px-3 py-1 rounded text-sm transition"
+          className="ml-auto bg-gray-700 hover:bg-gray-600 text-white px-3 py-1 rounded text-sm"
         >
           Refresh
         </button>
       </div>
 
-      <div className="flex-1 flex gap-4 p-4 overflow-hidden">
-        {/* Graph Canvas Area */}
-        <div className="flex-1 bg-gray-800 rounded border border-gray-700 overflow-auto relative">
-          <svg className="w-full h-full bg-gray-800" style={{ minWidth: '100%', minHeight: '100%' }}>
-            {/* Draw edges */}
-            {architecture.edges.map((edge) => {
-              const source = nodePositions[edge.source]
-              const target = nodePositions[edge.target]
-              if (!source || !target) return null
+      {error && (
+        <div className="bg-red-900/60 text-red-200 text-xs px-4 py-2">{error}</div>
+      )}
 
-              return (
-                <g key={`${edge.source}-${edge.target}`}>
-                  <line
-                    x1={source.x + 30}
-                    y1={source.y + 30}
-                    x2={target.x + 30}
-                    y2={target.y + 30}
-                    stroke="#4b5563"
-                    strokeWidth="1"
-                    opacity="0.6"
-                  />
-                  <text
-                    x={(source.x + target.x) / 2 + 30}
-                    y={(source.y + target.y) / 2 + 30}
-                    fontSize="10"
-                    fill="#9ca3af"
-                    textAnchor="middle"
-                  >
-                    {edge.type}
-                  </text>
-                </g>
-              )
-            })}
-
-            {/* Draw nodes */}
-            {architecture.nodes.map((node) => {
-              const pos = nodePositions[node.id]
-              if (!pos) return null
-
-              const isSelected = selectedNode === node.id
-              const color = getNodeColor(node.label)
-
-              return (
-                <g
-                  key={node.id}
-                  onClick={() => setSelectedNode(node.id)}
-                  style={{ cursor: 'pointer' }}
-                >
-                  <circle
-                    cx={pos.x + 30}
-                    cy={pos.y + 30}
-                    r="20"
-                    fill={color}
-                    opacity={isSelected ? 1 : 0.8}
-                    stroke={isSelected ? '#ffffff' : 'none'}
-                    strokeWidth="3"
-                  />
-                  <text
-                    x={pos.x + 30}
-                    y={pos.y + 35}
-                    fontSize="10"
-                    fill="white"
-                    textAnchor="middle"
-                    fontWeight="bold"
-                  >
-                    {node.label.charAt(0)}
-                  </text>
-                  <title>{node.data.label || node.id}</title>
-                </g>
-              )
-            })}
-          </svg>
+      <div className="flex-1 flex overflow-hidden">
+        {/* React Flow canvas */}
+        <div className="flex-1 bg-gray-900">
+          <ReactFlow
+            nodes={displayNodes}
+            edges={rfEdges}
+            nodeTypes={NODE_TYPES}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onNodeClick={onNodeClick}
+            fitView
+            attributionPosition="bottom-right"
+          >
+            <Background color="#374151" gap={20} />
+            <Controls />
+            <MiniMap
+              nodeColor={(n) => LABEL_COLOR[n.data?.label] ?? '#6b7280'}
+              style={{ background: '#1f2937' }}
+            />
+          </ReactFlow>
         </div>
 
-        {/* Details Panel */}
-        {selectedNodeData && (
-          <div className="w-80 bg-gray-800 rounded border border-gray-700 p-4 overflow-auto">
-            <h3 className="text-lg font-semibold mb-4">Node Details</h3>
-            <div className="space-y-3">
-              <div className="border-b border-gray-700 pb-2">
-                <p className="text-xs text-gray-500 uppercase">Name</p>
-                <p className="text-sm text-white">{selectedNodeData.data.label || selectedNodeData.id}</p>
-              </div>
-
-              <div className="border-b border-gray-700 pb-2">
-                <p className="text-xs text-gray-500 uppercase">Type</p>
-                <p className="text-sm text-white">{selectedNodeData.label}</p>
-              </div>
-
-              {/* Show relevant properties */}
-              {selectedNodeData.data.health_score !== undefined && (
-                <div className="border-b border-gray-700 pb-2">
-                  <p className="text-xs text-gray-500 uppercase">Health Score</p>
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 bg-gray-700 rounded h-2">
-                      <div
-                        className="h-full bg-green-500 rounded"
-                        style={{ width: `${selectedNodeData.data.health_score * 100}%` }}
-                      ></div>
-                    </div>
-                    <p className="text-sm text-white font-mono">
-                      {(selectedNodeData.data.health_score * 100).toFixed(0)}%
-                    </p>
+        {/* Detail panel */}
+        <div className="w-72 bg-gray-800 border-l border-gray-700 p-4 overflow-y-auto text-sm">
+          {selected ? (
+            <>
+              <h3 className="font-semibold text-lg mb-4">Node Details</h3>
+              <div className="space-y-3">
+                {[
+                  ['Name', selected.data.label || selected.id],
+                  ['Type', selected.label],
+                  ...(selected.data.health_score !== undefined
+                    ? [['Health', `${(selected.data.health_score * 100).toFixed(0)}%`]]
+                    : []),
+                  ...(selected.data.avg_p99_latency !== undefined
+                    ? [['P99 Latency', `${selected.data.avg_p99_latency}ms`]]
+                    : []),
+                  ...(selected.data.error_rate !== undefined
+                    ? [['Error Rate', `${(selected.data.error_rate * 100).toFixed(2)}%`]]
+                    : []),
+                  ...(selected.data.route ? [['Route', selected.data.route]] : []),
+                  ...(selected.data.method ? [['Method', selected.data.method]] : []),
+                  ...(selected.data.owner ? [['Owner', selected.data.owner]] : []),
+                ].map(([label, value]) => (
+                  <div key={label} className="border-b border-gray-700 pb-2">
+                    <p className="text-[10px] text-gray-500 uppercase">{label}</p>
+                    <p className="text-white font-mono text-xs mt-0.5">{value}</p>
                   </div>
-                </div>
-              )}
-
-              {selectedNodeData.data.avg_p99_latency !== undefined && (
-                <div className="border-b border-gray-700 pb-2">
-                  <p className="text-xs text-gray-500 uppercase">P99 Latency</p>
-                  <p className="text-sm text-white font-mono">{selectedNodeData.data.avg_p99_latency}ms</p>
-                </div>
-              )}
-
-              {selectedNodeData.data.error_rate !== undefined && (
-                <div className="border-b border-gray-700 pb-2">
-                  <p className="text-xs text-gray-500 uppercase">Error Rate</p>
-                  <p className="text-sm text-white font-mono">
-                    {(selectedNodeData.data.error_rate * 100).toFixed(2)}%
-                  </p>
-                </div>
-              )}
-
-              {selectedNodeData.data.route && (
-                <div className="border-b border-gray-700 pb-2">
-                  <p className="text-xs text-gray-500 uppercase">Route</p>
-                  <p className="text-sm text-white font-mono">{selectedNodeData.data.route}</p>
-                </div>
-              )}
-
-              {selectedNodeData.data.method && (
-                <div className="border-b border-gray-700 pb-2">
-                  <p className="text-xs text-gray-500 uppercase">Method</p>
-                  <p className="text-sm text-white font-mono">{selectedNodeData.data.method}</p>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {!selectedNodeData && (
-          <div className="w-80 bg-gray-800 rounded border border-gray-700 p-4 flex items-center justify-center">
-            <p className="text-center text-gray-400 text-sm">
-              👈 Click a node to view details
-            </p>
-          </div>
-        )}
+                ))}
+              </div>
+            </>
+          ) : (
+            <p className="text-gray-500 text-xs text-center mt-10">Click a node to view details</p>
+          )}
+        </div>
       </div>
 
-      <div className="border-t border-gray-700 p-2 bg-gray-800 text-xs text-gray-400">
-        <p>Showing {architecture.nodes.length} of {stats.total_nodes} nodes</p>
+      {/* Legend */}
+      <div className="border-t border-gray-700 bg-gray-800 px-4 py-2 flex gap-4 flex-wrap">
+        {Object.entries(LABEL_COLOR).map(([label, color]) => (
+          <div key={label} className="flex items-center gap-1 text-xs text-gray-400">
+            <div className="w-2.5 h-2.5 rounded-full" style={{ background: color }} />
+            {label}
+          </div>
+        ))}
       </div>
     </div>
   )

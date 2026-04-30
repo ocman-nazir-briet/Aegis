@@ -1,6 +1,8 @@
 from fastapi import APIRouter, HTTPException, Depends, Query, Request
 from datetime import datetime
 import logging
+import hmac
+import hashlib
 from typing import Optional, List
 
 from app.models import (
@@ -14,10 +16,14 @@ from app.services.neo4j_service import Neo4jService
 from app.services.ingestion_service import RepoIngestionService
 from app.services.simulation_service import SimulationService
 from app.services.telemetry_service import TelemetryService
+from app.services.auth_service import require_analyst, require_viewer, get_current_user
 from app.config import settings
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["api"])
+limiter = Limiter(key_func=get_remote_address)
 
 
 def get_neo4j_service(request: Request) -> Neo4jService:
@@ -146,19 +152,22 @@ async def get_node_details(
 
 
 @router.post("/simulate/change", response_model=APIResponse)
+@limiter.limit("60/minute")
 async def simulate_change(
-    request: ChangeRequest,
-    simulation: SimulationService = Depends(get_simulation_service)
+    request: Request,
+    body: ChangeRequest,
+    simulation: SimulationService = Depends(get_simulation_service),
+    _user: dict = Depends(require_analyst),
 ):
     """Analyze a proposed change and predict impact using GraphRAG + LLM."""
     try:
-        if len(request.diff) > settings.max_diff_size:
+        if len(body.diff) > settings.max_diff_size:
             return APIResponse(
                 success=False,
                 error=f"Diff exceeds maximum size of {settings.max_diff_size} bytes"
             )
 
-        result = simulation.simulate_change(request)
+        result = simulation.simulate_change(body)
         return APIResponse(success=True, data=result)
 
     except Exception as e:
@@ -172,7 +181,8 @@ async def simulate_change(
 @router.post("/simulate/whatif", response_model=APIResponse)
 async def simulate_whatif(
     request: WhatIfRequest,
-    simulation: SimulationService = Depends(get_simulation_service)
+    simulation: SimulationService = Depends(get_simulation_service),
+    _user: dict = Depends(require_analyst),
 ):
     """Simulate a what-if scenario for a specific service."""
     try:
@@ -224,7 +234,8 @@ async def get_centrality(neo4j: Neo4jService = Depends(get_neo4j_service)):
 @router.post("/feedback/outcome", response_model=APIResponse)
 async def record_feedback(
     request: FeedbackRequest,
-    neo4j: Neo4jService = Depends(get_neo4j_service)
+    neo4j: Neo4jService = Depends(get_neo4j_service),
+    _user: dict = Depends(require_analyst),
 ):
     """Record actual post-deployment outcome for a simulation."""
     try:
@@ -276,3 +287,245 @@ async def ingest_telemetry(
             success=False,
             error=str(e)
         )
+
+
+@router.get("/pr/{pr_id}/analysis", response_model=APIResponse)
+async def get_pr_analysis(
+    pr_id: str,
+    neo4j: Neo4jService = Depends(get_neo4j_service)
+):
+    """Get the most recent risk analysis for a specific PR."""
+    try:
+        with neo4j.driver.session() as session:
+            result = session.run("""
+                MATCH (ce:ChangeEvent)
+                WHERE ce.pr_url CONTAINS $pr_id OR toString(ce.change_id) = $pr_id
+                RETURN ce ORDER BY ce.simulated_at DESC LIMIT 1
+            """, pr_id=pr_id)
+            record = result.single()
+            if not record:
+                return APIResponse(
+                    success=False,
+                    error=f"No analysis found for PR {pr_id}"
+                )
+            return APIResponse(
+                success=True,
+                data=dict(record["ce"])
+            )
+
+    except Exception as e:
+        logger.error(f"Failed to get PR analysis: {e}")
+        return APIResponse(
+            success=False,
+            error=str(e)
+        )
+
+
+# ==================== Phase 4: Production Readiness ====================
+
+
+@router.post("/feedback/prediction", response_model=APIResponse)
+async def submit_prediction_feedback(
+    request: dict,
+    neo4j: Neo4jService = Depends(get_neo4j_service)
+):
+    """Submit feedback on prediction accuracy for adaptive learning."""
+    try:
+        from app.services.feedback_service import FeedbackService
+        feedback_service = FeedbackService(neo4j)
+
+        from app.models import PredictionFeedback
+        feedback = PredictionFeedback(**request)
+        success = feedback_service.submit_feedback(feedback)
+
+        if success:
+            return APIResponse(success=True, data={"message": "Feedback recorded"})
+        else:
+            return APIResponse(success=False, error="Failed to record feedback")
+
+    except Exception as e:
+        logger.error(f"Feedback submission failed: {e}")
+        return APIResponse(success=False, error=str(e))
+
+
+@router.get("/monitoring/metrics", response_model=APIResponse)
+async def get_monitoring_metrics(request):
+    """Get current system monitoring metrics."""
+    try:
+        monitoring = request.app.state.monitoring
+        metrics = monitoring.get_current_metrics()
+        return APIResponse(success=True, data=metrics.dict())
+    except Exception as e:
+        logger.error(f"Failed to get monitoring metrics: {e}")
+        return APIResponse(success=False, error=str(e))
+
+
+@router.get("/monitoring/accuracy", response_model=APIResponse)
+async def get_accuracy_report(
+    days: int = Query(7, ge=1, le=90),
+    neo4j: Neo4jService = Depends(get_neo4j_service)
+):
+    """Get model accuracy report over time period."""
+    try:
+        from app.services.monitoring_service import MonitoringService
+        monitoring = MonitoringService(neo4j)
+        report = monitoring.get_accuracy_report(days=days)
+        return APIResponse(success=True, data=report.dict())
+    except Exception as e:
+        logger.error(f"Failed to get accuracy report: {e}")
+        return APIResponse(success=False, error=str(e))
+
+
+@router.get("/monitoring/performance", response_model=APIResponse)
+async def get_performance_metrics(
+    hours: int = Query(24, ge=1, le=720),
+    neo4j: Neo4jService = Depends(get_neo4j_service)
+):
+    """Get performance metrics by endpoint."""
+    try:
+        from app.services.monitoring_service import MonitoringService
+        monitoring = MonitoringService(neo4j)
+        metrics = monitoring.get_performance_by_endpoint(hours=hours)
+        return APIResponse(success=True, data=[m.dict() for m in metrics])
+    except Exception as e:
+        logger.error(f"Failed to get performance metrics: {e}")
+        return APIResponse(success=False, error=str(e))
+
+
+@router.get("/insights/false-positives", response_model=APIResponse)
+async def get_false_positives(
+    days: int = Query(30, ge=1, le=90),
+    neo4j: Neo4jService = Depends(get_neo4j_service)
+):
+    """Get false positive predictions (predicted high but actual was low)."""
+    try:
+        from app.services.feedback_service import FeedbackService
+        feedback_service = FeedbackService(neo4j)
+        fps = feedback_service.get_false_positives(days=days)
+        return APIResponse(success=True, data={"false_positives": fps})
+    except Exception as e:
+        logger.error(f"Failed to get false positives: {e}")
+        return APIResponse(success=False, error=str(e))
+
+
+@router.get("/insights/false-negatives", response_model=APIResponse)
+async def get_false_negatives(
+    days: int = Query(30, ge=1, le=90),
+    neo4j: Neo4jService = Depends(get_neo4j_service)
+):
+    """Get false negative predictions (predicted low but actual was high)."""
+    try:
+        from app.services.feedback_service import FeedbackService
+        feedback_service = FeedbackService(neo4j)
+        fns = feedback_service.get_false_negatives(days=days)
+        return APIResponse(success=True, data={"false_negatives": fns})
+    except Exception as e:
+        logger.error(f"Failed to get false negatives: {e}")
+        return APIResponse(success=False, error=str(e))
+
+
+@router.get("/insights/improvement-recommendations", response_model=APIResponse)
+async def get_improvement_recommendations(neo4j: Neo4jService = Depends(get_neo4j_service)):
+    """Get AI-generated recommendations for improving prediction accuracy."""
+    try:
+        from app.services.feedback_service import FeedbackService
+        feedback_service = FeedbackService(neo4j)
+        recommendations = feedback_service.generate_improvement_recommendations()
+        return APIResponse(success=True, data={"recommendations": recommendations})
+    except Exception as e:
+        logger.error(f"Failed to get recommendations: {e}")
+        return APIResponse(success=False, error=str(e))
+
+
+@router.get("/changes/recent", response_model=APIResponse)
+async def get_recent_changes(
+    limit: int = Query(50, ge=1, le=200),
+    neo4j: Neo4jService = Depends(get_neo4j_service),
+    _user: dict = Depends(require_viewer),
+):
+    """Return the most recent ChangeEvents for the PR Review page."""
+    try:
+        with neo4j.driver.session() as session:
+            result = session.run("""
+                MATCH (ce:ChangeEvent)
+                RETURN ce
+                ORDER BY ce.simulated_at DESC
+                LIMIT $limit
+            """, limit=limit)
+            changes = []
+            for record in result:
+                node = dict(record["ce"])
+                if "actual_outcome" in node and not isinstance(node["actual_outcome"], dict):
+                    node["actual_outcome"] = {}
+                changes.append(node)
+        return APIResponse(success=True, data=changes)
+    except Exception as e:
+        logger.error(f"Failed to fetch recent changes: {e}")
+        return APIResponse(success=False, error=str(e))
+
+
+@router.get("/metrics", response_model=APIResponse)
+async def get_metrics(request: Request):
+    """Get Prometheus metrics for monitoring and alerting."""
+    try:
+        prometheus = request.app.state.prometheus
+        text_format = prometheus.get_prometheus_text()
+        return APIResponse(success=True, data={"metrics": text_format})
+    except Exception as e:
+        logger.error(f"Failed to get metrics: {e}")
+        return APIResponse(success=False, error=str(e))
+
+
+@router.post("/export/pdf", response_model=APIResponse)
+async def export_simulation_pdf(
+    request: dict,
+    _user: dict = Depends(require_viewer),
+):
+    """Export a simulation result as PDF."""
+    try:
+        from app.services.pdf_export_service import PDFExportService
+
+        result = request.get("result", {})
+        repo_url = request.get("repo_url", "")
+
+        pdf_bytes = PDFExportService.export_simulation_result(result, repo_url)
+        if not pdf_bytes:
+            return APIResponse(success=False, error="PDF generation failed")
+
+        return APIResponse(success=True, data={"pdf_base64": __import__("base64").b64encode(pdf_bytes).decode()})
+    except Exception as e:
+        logger.error(f"PDF export failed: {e}")
+        return APIResponse(success=False, error=str(e))
+
+
+@router.post("/ingest/webhook", response_model=APIResponse)
+async def github_webhook(
+    request: Request,
+    neo4j: Neo4jService = Depends(get_neo4j_service)
+):
+    """GitHub webhook handler for push/PR events. Triggers incremental sync."""
+    try:
+        payload = await request.json()
+        event_type = request.headers.get("X-GitHub-Event", "unknown")
+
+        if event_type == "push":
+            repo_url = payload.get("repository", {}).get("clone_url", "")
+            branch = payload.get("ref", "").split("/")[-1]
+            from app.services.incremental_sync_service import IncrementalSyncService
+            sync_svc = IncrementalSyncService(neo4j)
+            sync_svc.mark_sync(repo_url, "incremental")
+            logger.info(f"Webhook: marked {repo_url}:{branch} for incremental sync")
+            return APIResponse(success=True, data={"message": "Sync queued"})
+
+        elif event_type == "pull_request":
+            pr_action = payload.get("action")
+            if pr_action in ["opened", "synchronize"]:
+                pr_url = payload.get("pull_request", {}).get("html_url", "")
+                logger.info(f"Webhook: PR event for {pr_url}")
+                return APIResponse(success=True, data={"message": "PR event logged"})
+
+        return APIResponse(success=True, data={"message": f"Event {event_type} logged"})
+
+    except Exception as e:
+        logger.error(f"Webhook processing failed: {e}")
+        return APIResponse(success=False, error=str(e))

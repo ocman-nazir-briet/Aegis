@@ -1,0 +1,88 @@
+{
+  "name": "aegis-twin",
+  "displayName": "Aegis Twin",
+  "description": "Real-time risk analysis for architecture changes in VS Code",
+  "version": "1.0.0",
+  "publisher": "aegis",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "aegis.runSimulation",
+        "title": "Aegis: Run Risk Simulation"
+      },
+      {
+        "command": "aegis.openDashboard",
+        "title": "Aegis: Open Dashboard"
+      },
+      {
+        "command": "aegis.clearDecorations",
+        "title": "Aegis: Clear Risk Decorations"
+      }
+    ],
+    "views": {
+      "aegisTwinSidebar": [
+        {
+          "id": "aegis.sidebar",
+          "name": "Risk Analysis",
+          "when": "true"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "aegisTwinSidebar",
+          "title": "Aegis Twin",
+          "icon": "resources/aegis-icon.svg"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Aegis Twin",
+      "properties": {
+        "aegisTwin.apiUrl": {
+          "type": "string",
+          "default": "http://localhost:8000",
+          "description": "Base URL of Aegis API server"
+        },
+        "aegisTwin.repoUrl": {
+          "type": "string",
+          "default": "",
+          "description": "Repository URL (auto-detected if blank)"
+        },
+        "aegisTwin.autoAnalyzeOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically analyze on file save"
+        },
+        "aegisTwin.token": {
+          "type": "string",
+          "default": "",
+          "description": "Bearer token for authentication",
+          "markdownDescription": "JWT bearer token for API calls"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc",
+    "watch": "tsc -w",
+    "vscode:prepublish": "npm run compile"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.3.0"
+  }
+}

@@ -2,10 +2,14 @@ import { useState, useEffect } from 'react'
 import axios from 'axios'
 import ArchitectureExplorer from './components/ArchitectureExplorer'
 import SimulationStudio from './components/SimulationStudio'
+import MonitoringDashboard from './components/MonitoringDashboard'
+import PRReview from './components/PRReview'
+import HealthInsights from './components/HealthInsights'
+import Settings from './components/Settings'
 import { GraphStats, APIResponse } from './types'
 
 function App() {
-  const [activeTab, setActiveTab] = useState<'explorer' | 'simulation'>('explorer')
+  const [activeTab, setActiveTab] = useState<'explorer' | 'simulation' | 'monitoring' | 'pr-review' | 'health' | 'settings'>('explorer')
   const [stats, setStats] = useState<GraphStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -61,6 +65,46 @@ function App() {
           >
             🧪 Simulation Studio
           </button>
+          <button
+            onClick={() => setActiveTab('monitoring')}
+            className={`px-6 py-3 text-sm font-semibold transition border-b-2 ${
+              activeTab === 'monitoring'
+                ? 'border-blue-500 text-white'
+                : 'border-transparent text-gray-400 hover:text-gray-300'
+            }`}
+          >
+            📊 Monitoring
+          </button>
+          <button
+            onClick={() => setActiveTab('pr-review')}
+            className={`px-6 py-3 text-sm font-semibold transition border-b-2 ${
+              activeTab === 'pr-review'
+                ? 'border-blue-500 text-white'
+                : 'border-transparent text-gray-400 hover:text-gray-300'
+            }`}
+          >
+            🔀 PR Review
+          </button>
+          <button
+            onClick={() => setActiveTab('health')}
+            className={`px-6 py-3 text-sm font-semibold transition border-b-2 ${
+              activeTab === 'health'
+                ? 'border-blue-500 text-white'
+                : 'border-transparent text-gray-400 hover:text-gray-300'
+            }`}
+          >
+            📈 Health
+          </button>
+          <button
+            onClick={() => setActiveTab('settings')}
+            className={`px-6 py-3 text-sm font-semibold transition border-b-2 ${
+              activeTab === 'settings'
+                ? 'border-blue-500 text-white'
+                : 'border-transparent text-gray-400 hover:text-gray-300'
+            }`}
+          >
+            ⚙️ Settings
+          </button>
         </div>
       </div>
 
@@ -86,12 +130,17 @@ function App() {
             <>
               {activeTab === 'explorer' && <ArchitectureExplorer stats={stats} />}
               {activeTab === 'simulation' && <SimulationStudio />}
+              {activeTab === 'monitoring' && <MonitoringDashboard />}
             </>
           )}
+
+          {activeTab === 'pr-review' && <PRReview />}
+          {activeTab === 'health' && <HealthInsights />}
+          {activeTab === 'settings' && <Settings />}
         </div>
 
         {/* Sidebar (only show on explorer tab) */}
-        {activeTab === 'explorer' && (
+        {activeTab === 'explorer' && stats && (
           <aside className="w-64 bg-gray-800 border-l border-gray-700 p-4 overflow-y-auto">
             <div className="space-y-4">
               <div>

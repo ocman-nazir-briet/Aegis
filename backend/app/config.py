@@ -13,6 +13,13 @@ class Settings(BaseSettings):
 
     jwt_secret: str = "your-secret-key-change-in-production"
     jwt_algorithm: str = "HS256"
+    jwt_expire_minutes: int = 60
+
+    # Default users (override in .env)
+    admin_username: str = "admin"
+    admin_password: str = "changeme"
+    viewer_username: str = "viewer"
+    viewer_password: str = "viewonly"
 
     github_token: Optional[str] = None
     gitlab_token: Optional[str] = None
