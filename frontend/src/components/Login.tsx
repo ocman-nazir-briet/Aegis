@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import axios from 'axios';
+import api from '../utils/axios';
 import { authUtils } from '../utils/auth';
 
 interface LoginProps {
@@ -18,7 +18,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
     setLoading(true);
 
     try {
-      const response = await axios.post('/api/auth/token', {
+      const response = await api.post('/api/auth/token', {
         username,
         password,
       });
