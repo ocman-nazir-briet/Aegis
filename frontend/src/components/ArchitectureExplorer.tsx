@@ -193,36 +193,43 @@ export default function ArchitectureExplorer({ stats }: Props) {
         </div>
 
         {/* Detail panel */}
-        <div className="w-72 bg-gray-800 border-l border-gray-700 p-4 overflow-y-auto text-sm">
+        <div className="w-80 bg-gray-800 border-l border-gray-700 p-4 overflow-y-auto text-sm">
           {selected ? (
             <>
-              <h3 className="font-semibold text-lg mb-4">Node Details</h3>
-              <div className="space-y-3">
-                {[
-                  ['Name', selected.data.label || selected.id],
-                  ['Type', selected.label],
-                  ...(selected.data.health_score !== undefined
-                    ? [['Health', `${(selected.data.health_score * 100).toFixed(0)}%`]]
-                    : []),
-                  ...(selected.data.avg_p99_latency !== undefined
-                    ? [['P99 Latency', `${selected.data.avg_p99_latency}ms`]]
-                    : []),
-                  ...(selected.data.error_rate !== undefined
-                    ? [['Error Rate', `${(selected.data.error_rate * 100).toFixed(2)}%`]]
-                    : []),
-                  ...(selected.data.route ? [['Route', selected.data.route]] : []),
-                  ...(selected.data.method ? [['Method', selected.data.method]] : []),
-                  ...(selected.data.owner ? [['Owner', selected.data.owner]] : []),
-                ].map(([label, value]) => (
-                  <div key={label} className="border-b border-gray-700 pb-2">
-                    <p className="text-[10px] text-gray-500 uppercase">{label}</p>
-                    <p className="text-white font-mono text-xs mt-0.5">{value}</p>
-                  </div>
-                ))}
+              <h3 className="font-semibold text-lg mb-2">{selected.data.label || selected.id}</h3>
+              <p className="text-[10px] text-gray-400 mb-4">Type: <span className="text-gray-300">{selected.label}</span></p>
+              <div className="space-y-2">
+                {Object.entries(selected.data || {})
+                  .filter(([key]) => !['label', 'name'].includes(key))
+                  .map(([key, value]) => {
+                    let displayValue = value
+                    // Format numbers
+                    if (typeof value === 'number') {
+                      if (key.includes('score') || key.includes('rate')) {
+                        displayValue = `${(value * 100).toFixed(2)}%`
+                      } else if (key.includes('latency') || key.includes('ms')) {
+                        displayValue = `${value}ms`
+                      }
+                    }
+                    // Skip null/undefined
+                    if (value === null || value === undefined) return null
+
+                    return (
+                      <div key={key} className="border-b border-gray-700 pb-2">
+                        <p className="text-[10px] text-gray-400 uppercase tracking-wide">{key.replace(/_/g, ' ')}</p>
+                        <p className="text-white font-mono text-xs mt-1 break-words">
+                          {typeof value === 'object' ? JSON.stringify(value, null, 2) : String(displayValue)}
+                        </p>
+                      </div>
+                    )
+                  })}
+              </div>
+              <div className="mt-4 pt-4 border-t border-gray-700 text-[10px] text-gray-500">
+                <p>Node ID: <span className="font-mono text-gray-400">{selected.id}</span></p>
               </div>
             </>
           ) : (
-            <p className="text-gray-500 text-xs text-center mt-10">Click a node to view details</p>
+            <p className="text-gray-500 text-xs text-center mt-10">👈 Click a node to view full details</p>
           )}
         </div>
       </div>
