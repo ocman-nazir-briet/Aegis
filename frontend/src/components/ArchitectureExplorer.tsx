@@ -12,7 +12,7 @@ import ReactFlow, {
   Position,
 } from 'reactflow'
 import 'reactflow/dist/style.css'
-import axios from 'axios'
+import api from '../utils/axios'
 import { GraphStats, APIResponse } from '../types'
 import type { ArchitectureMap, Node as GraphNode } from '../types'
 
@@ -111,7 +111,7 @@ export default function ArchitectureExplorer({ stats }: Props) {
     setLoading(true)
     setError(null)
     try {
-      const res = await axios.get<APIResponse<ArchitectureMap>>('/api/v1/architecture/map?limit=500')
+      const res = await api.get<APIResponse<ArchitectureMap>>('/api/v1/architecture/map?limit=500')
       if (res.data.success && res.data.data) buildGraph(res.data.data)
       else setError(res.data.error || 'No data')
     } catch {

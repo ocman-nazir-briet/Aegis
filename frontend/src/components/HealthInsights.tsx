@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import axios from 'axios'
+import api from "../utils/axios"
 import {
   LineChart, Line, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
@@ -41,9 +41,9 @@ export default function HealthInsights() {
       setLoading(true)
       try {
         const [h, c, m] = await Promise.all([
-          axios.get('/api/v1/insights/hotspots'),
-          axios.get('/api/v1/insights/centrality'),
-          axios.get('/api/v1/monitoring/metrics'),
+          api.get('/api/v1/insights/hotspots'),
+          api.get('/api/v1/insights/centrality'),
+          api.get('/api/v1/monitoring/metrics'),
         ])
         if (h.data.success)  setHotspots(h.data.data.hotspots ?? [])
         if (c.data.success)  setCentrality(c.data.data.services ?? [])

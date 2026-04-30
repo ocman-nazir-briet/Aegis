@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import axios from 'axios'
+import api from "../utils/axios"
 
 interface User { username: string; role: string }
 
@@ -25,7 +25,7 @@ export default function Settings() {
 
   const fetchUsers = async () => {
     try {
-      const res = await axios.get('/admin/users', {
+      const res = await api.get('/admin/users', {
         headers: { Authorization: `Bearer ${token}` },
       })
       if (res.data.success) setUsers(res.data.data.users)
@@ -43,7 +43,7 @@ export default function Settings() {
   const rebuildIndexes = async () => {
     setRebuildStatus('Working…')
     try {
-      const res = await axios.post('/admin/rebuild-indexes', {}, {
+      const res = await api.post('/admin/rebuild-indexes', {}, {
         headers: { Authorization: `Bearer ${token}` },
       })
       setRebuildStatus(res.data.success ? '✅ Done' : `❌ ${res.data.error}`)
@@ -56,7 +56,7 @@ export default function Settings() {
     if (clearConfirm !== 'yes-delete-everything') return
     setClearStatus('Clearing…')
     try {
-      const res = await axios.post(
+      const res = await api.post(
         `/admin/clear-graph?confirm=${encodeURIComponent(clearConfirm)}`,
         {},
         { headers: { Authorization: `Bearer ${token}` } },

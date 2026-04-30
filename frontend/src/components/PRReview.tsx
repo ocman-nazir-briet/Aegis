@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import axios from 'axios'
+import api from "../utils/axios"
 import { APIResponse, SimulationResult } from '../types'
 
 interface PREntry {
@@ -39,7 +39,7 @@ export default function PRReview() {
       // Pull the most recent ChangeEvents from the graph as a PR list
       const res = await axios.get<APIResponse<{ hotspots: any[] }>>('/api/v1/insights/hotspots')
       // Also fetch recent change events
-      const statsRes = await axios.get('/api/v1/graph/stats')
+      const statsRes = await api.get('/api/v1/graph/stats')
       // Query recent ChangeEvents through architecture map metadata
       const changeRes = await axios.get<any>('/api/v1/changes/recent')
       if (changeRes.data.success) {

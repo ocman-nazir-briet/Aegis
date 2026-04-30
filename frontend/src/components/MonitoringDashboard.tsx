@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import axios from 'axios'
+import api from "../utils/axios"
 
 interface MonitoringMetrics {
   timestamp: string
@@ -48,9 +48,9 @@ export default function MonitoringDashboard() {
   const fetchMonitoringData = async () => {
     try {
       const [metricsRes, accuracyRes, recsRes] = await Promise.all([
-        axios.get('/api/v1/monitoring/metrics'),
-        axios.get('/api/v1/monitoring/accuracy?days=7'),
-        axios.get('/api/v1/insights/improvement-recommendations')
+        api.get('/api/v1/monitoring/metrics'),
+        api.get('/api/v1/monitoring/accuracy?days=7'),
+        api.get('/api/v1/insights/improvement-recommendations')
       ])
 
       if (metricsRes.data.success) setMetrics(metricsRes.data.data)

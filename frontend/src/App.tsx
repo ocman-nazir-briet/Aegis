@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
-import axios from 'axios'
+import api from './utils/axios'
+import { authUtils } from './utils/auth'
+import Login from './components/Login'
 import ArchitectureExplorer from './components/ArchitectureExplorer'
 import SimulationStudio from './components/SimulationStudio'
 import MonitoringDashboard from './components/MonitoringDashboard'
@@ -9,19 +11,23 @@ import Settings from './components/Settings'
 import { GraphStats, APIResponse } from './types'
 
 function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState(authUtils.isAuthenticated())
+  const [username, setUsername] = useState(authUtils.getUsername())
   const [activeTab, setActiveTab] = useState<'explorer' | 'simulation' | 'monitoring' | 'pr-review' | 'health' | 'settings'>('explorer')
   const [stats, setStats] = useState<GraphStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    fetchGraphStats()
-  }, [])
+    if (isAuthenticated) {
+      fetchGraphStats()
+    }
+  }, [isAuthenticated])
 
   const fetchGraphStats = async () => {
     try {
       setLoading(true)
-      const response = await axios.get<APIResponse<GraphStats>>('/api/v1/graph/stats')
+      const response = await api.get<APIResponse<GraphStats>>('/api/v1/graph/stats')
       if (response.data.success && response.data.data) {
         setStats(response.data.data)
       } else {
@@ -34,12 +40,42 @@ function App() {
     }
   }
 
+  const handleLoginSuccess = () => {
+    setIsAuthenticated(true)
+    setUsername(authUtils.getUsername())
+  }
+
+  const handleLogout = () => {
+    authUtils.clearToken()
+    setIsAuthenticated(false)
+    setUsername(null)
+    setStats(null)
+  }
+
+  // Show login if not authenticated
+  if (!isAuthenticated) {
+    return <Login onLoginSuccess={handleLoginSuccess} />
+  }
+
   return (
     <div className="w-full h-screen flex flex-col bg-gray-900 text-white">
       {/* Header */}
-      <header className="bg-gray-800 border-b border-gray-700 p-4">
-        <h1 className="text-2xl font-bold">Aegis Twin</h1>
-        <p className="text-sm text-gray-400">AI-Native Predictive Digital Twin for Software Architectures</p>
+      <header className="bg-gray-800 border-b border-gray-700 p-4 flex justify-between items-center">
+        <div>
+          <h1 className="text-2xl font-bold">Aegis Twin</h1>
+          <p className="text-sm text-gray-400">AI-Native Predictive Digital Twin for Software Architectures</p>
+        </div>
+        <div className="flex items-center gap-4">
+          <span className="text-sm text-gray-400">
+            {username && `Logged in as: ${username}`}
+          </span>
+          <button
+            onClick={handleLogout}
+            className="px-4 py-2 text-sm bg-gray-700 hover:bg-gray-600 text-white rounded transition"
+          >
+            Sign Out
+          </button>
+        </div>
       </header>
 
       {/* Tab navigation */}

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import axios from 'axios'
+import api from '../utils/axios'
 import { ChangeRequest, WhatIfRequest, SimulationResult } from '../types'
 import { useSimulationStore } from '../store/simulationStore'
 import RiskReport from './RiskReport'
@@ -32,13 +32,13 @@ export default function SimulationStudio() {
           repo_url: repoUrl,
           context: context || undefined
         }
-        response = await axios.post('/api/v1/simulate/change', request)
+        response = await api.post('/api/v1/simulate/change', request)
       } else {
         const request: WhatIfRequest = {
           description,
           target_service: targetService
         }
-        response = await axios.post('/api/v1/simulate/whatif', request)
+        response = await api.post('/api/v1/simulate/whatif', request)
       }
 
       if (response.data.success && response.data.data) {

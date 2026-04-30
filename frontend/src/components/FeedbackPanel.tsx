@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import axios from 'axios'
+import api from "../utils/axios"
 
 interface FeedbackPanelProps {
   simulationId?: string
@@ -23,7 +23,7 @@ export default function FeedbackPanel({ simulationId, predictedRisk, onSubmit }:
 
     setLoading(true)
     try {
-      const response = await axios.post('/api/v1/feedback/prediction', {
+      const response = await api.post('/api/v1/feedback/prediction', {
         simulation_id: simulationId,
         predicted_risk: predictedRisk || 'Unknown',
         actual_risk: actualRisk,
