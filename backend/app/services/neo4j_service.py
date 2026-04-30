@@ -296,9 +296,9 @@ class Neo4jService:
             result = session.run("""
                 MATCH (s:Service)
                 WITH s,
-                     SIZE((s)<-[:RELIANT_ON]-()) as incoming_deps,
-                     SIZE((s)-[:RELIANT_ON]->()) as outgoing_deps,
-                     SIZE((s)-[:DEPENDS_ON]->()) as data_deps
+                     SIZE([(s)<-[:RELIANT_ON]-(x) | x]) as incoming_deps,
+                     SIZE([(s)-[:RELIANT_ON]->(x) | x]) as outgoing_deps,
+                     SIZE([(s)-[:DEPENDS_ON]->(x) | x]) as data_deps
                 RETURN
                     s.name as name,
                     s.health_score as health_score,
@@ -329,12 +329,12 @@ class Neo4jService:
         with self.driver.session() as session:
             result = session.run("""
                 MATCH (s:Service)
-                WITH s, SIZE((s)-[]-()) as degree
+                WITH s, SIZE([(s)-[r]-(x) | r]) as degree
                 RETURN
                     s.name as name,
                     degree as centrality_score,
-                    SIZE((s)-[:CONTAINS]->()) as function_count,
-                    SIZE((s)-[:EXPOSES]->()) as endpoint_count
+                    SIZE([(s)-[:CONTAINS]->(x) | x]) as function_count,
+                    SIZE([(s)-[:EXPOSES]->(x) | x]) as endpoint_count
                 ORDER BY degree DESC
                 LIMIT 15
             """)
