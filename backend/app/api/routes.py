@@ -114,10 +114,7 @@ async def get_architecture_map(
     """Get architecture topology as React Flow compatible graph."""
     try:
         arch_map = neo4j.get_architecture_map(limit)
-        return APIResponse(
-            success=True,
-            data=ArchitectureMapResponse(**arch_map)
-        )
+        return APIResponse(success=True, data=arch_map)
     except Exception as e:
         logger.error(f"Failed to get architecture map: {e}")
         return APIResponse(
@@ -349,7 +346,7 @@ async def submit_prediction_feedback(
 
 
 @router.get("/monitoring/metrics", response_model=APIResponse)
-async def get_monitoring_metrics(request):
+async def get_monitoring_metrics(request: Request):
     """Get current system monitoring metrics."""
     try:
         monitoring = request.app.state.monitoring

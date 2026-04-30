@@ -144,7 +144,7 @@ class MonitoringService:
                 WHERE ce.actual_risk IS NOT NULL
                 WITH COUNT(ce) as total,
                      SUM(CASE WHEN ce.predicted_risk = ce.actual_risk THEN 1 ELSE 0 END) as correct
-                RETURN total, correct, CASE WHEN total > 0 THEN FLOAT(correct) / total ELSE 0.0 END as accuracy
+                RETURN total, correct, CASE WHEN total > 0 THEN toFloat(correct) / total ELSE 0.0 END as accuracy
             """)
             record = result.single()
             if record:
@@ -196,7 +196,7 @@ class MonitoringService:
                 WHERE ce.feedback_timestamp > datetime() - duration('P' + $days + 'D')
                 WITH COUNT(ce) as total,
                      SUM(CASE WHEN ce.predicted_risk = ce.actual_risk THEN 1 ELSE 0 END) as correct
-                RETURN total, correct, CASE WHEN total > 0 THEN FLOAT(correct) / total ELSE 0.0 END as accuracy
+                RETURN total, correct, CASE WHEN total > 0 THEN toFloat(correct) / total ELSE 0.0 END as accuracy
             """, days=days)
             record = result.single()
             total = record["total"] or 0
@@ -212,7 +212,7 @@ class MonitoringService:
                      COUNT(ce) as total,
                      SUM(CASE WHEN ce.predicted_risk = ce.actual_risk THEN 1 ELSE 0 END) as correct
                 RETURN risk_level, total, correct,
-                       CASE WHEN total > 0 THEN FLOAT(correct) / total ELSE 0.0 END as accuracy
+                       CASE WHEN total > 0 THEN toFloat(correct) / total ELSE 0.0 END as accuracy
             """, days=days)
             for rec in risk_result:
                 by_risk[rec["risk_level"]] = {

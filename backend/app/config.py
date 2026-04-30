@@ -1,5 +1,13 @@
 from pydantic_settings import BaseSettings
+from pydantic import ConfigDict
 from typing import Optional
+from pathlib import Path
+from dotenv import load_dotenv
+import os
+
+# Explicitly load .env file
+env_path = Path(__file__).parent.parent / ".env"
+load_dotenv(env_path, override=True)
 
 
 class Settings(BaseSettings):
@@ -32,9 +40,7 @@ class Settings(BaseSettings):
     simulation_timeout: int = 30
     ingestion_timeout: int = 300
 
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
+    model_config = ConfigDict(case_sensitive=False)
 
 
 settings = Settings()

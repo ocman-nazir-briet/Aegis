@@ -2,8 +2,26 @@ from neo4j import GraphDatabase, Session
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 import logging
+from neo4j.time import DateTime, Date, Time, Duration
 
 logger = logging.getLogger(__name__)
+
+
+def _serialize_neo4j_value(value: Any) -> Any:
+    """Convert Neo4j objects to JSON-serializable Python types."""
+    if isinstance(value, DateTime):
+        return value.to_native().isoformat()
+    elif isinstance(value, Date):
+        return value.to_native().isoformat()
+    elif isinstance(value, Time):
+        return str(value)
+    elif isinstance(value, Duration):
+        return str(value)
+    elif isinstance(value, dict):
+        return {k: _serialize_neo4j_value(v) for k, v in value.items()}
+    elif isinstance(value, (list, tuple)):
+        return [_serialize_neo4j_value(v) for v in value]
+    return value
 
 
 class Neo4jService:
@@ -109,12 +127,13 @@ class Neo4jService:
             for record in nodes_result:
                 node_id = record["id"]
                 node_ids.add(node_id)
+                properties = _serialize_neo4j_value(record["properties"])
                 nodes.append({
                     "id": str(node_id),
                     "label": record["label"],
                     "data": {
-                        "label": record["properties"].get("name", record["label"]),
-                        **record["properties"]
+                        "label": properties.get("name", record["label"]),
+                        **properties
                     }
                 })
 

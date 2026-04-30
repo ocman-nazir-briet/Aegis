@@ -25,7 +25,7 @@ limiter = Limiter(key_func=get_remote_address)
 
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s %(name)s %(levelname)s [%(correlation_id)s] %(message)s',
+    format='%(asctime)s %(name)s %(levelname)s %(message)s',
 )
 logger = logging.getLogger(__name__)
 
@@ -151,11 +151,14 @@ app.add_middleware(StaleGraphMiddleware)
 app.add_middleware(RequestLoggingMiddleware)
 app.add_middleware(CorrelationMiddleware)
 
-allowed_origins = (
-    ["http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:3000"]
-    if settings.debug
-    else ["https://aegis.example.com"]
-)
+allowed_origins = [
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:5173",
+]
+if settings.debug:
+    allowed_origins.append("https://aegis.example.com")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
