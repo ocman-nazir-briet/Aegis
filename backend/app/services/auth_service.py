@@ -76,6 +76,7 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 
 def authenticate_user(username: str, password: str) -> Optional[dict]:
+    _seed_default_users()  # Ensure users are initialized
     user = _USERS.get(username)
     if not user or not verify_password(password, user["hashed_password"]):
         return None
